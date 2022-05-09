@@ -1,0 +1,289 @@
+---
+title: "Final"
+output: pdf_document
+---
+
+
+```{r}
+library(tsdl)
+ozo.ts = tsdl[[334]]
+plot.ts(ozo.ts)
+n = length(ozo.ts)
+fits = lm(ozo.ts ~ as.numeric(1:n));abline(h=mean(ozo.ts), col = 'blue');abline(fits, col="red")
+```
+
+
+Next
+```{r}
+ozo = ozo.ts[c(1:204)] #truncating data
+ozo.test = ozo.ts[c(205:216)]
+plot.ts(ozo) #plotting new truncated data
+lm(ozo ~ as.numeric(1:length(ozo)))
+fit = lm(ozo ~ as.numeric(1:length(ozo))); abline(fit, col="red")
+abline(h=mean(ozo), col="blue")
+```
+
+
+
+Next
+```{r}
+par(mfrow = c(2,2))
+hist(ozo, col="light blue", xlab="", main="histogram; ozo data") #Skewed Data
+acf(ozo,lag.max=40, main="ACF of the ozo data") #ACF large and periodic
+```
+
+
+
+Next
+
+```{r}
+library(MASS)
+bcTransform = boxcox(ozo~ as.numeric(1:length(ozo)))  #plots the graph
+
+lambda = bcTransform$x[which(bcTransform$y == max(bcTransform$y))] #gives lambda
+
+ozo.bc = (1/lambda)*(ozo^lambda-1)  #bc transform
+ozo.log = log(ozo)    #log transform
+ozo.s = sqrt(ozo)   #sqrt transform
+plot.ts(ozo.bc, main = 'ozo boxcox transform')
+plot.ts(ozo.log, main = 'ozo log transform')
+
+plot.ts(ozo.s, , main = 'ozo square_root transform')
+
+hist(ozo.log, col="light blue", xlab="", main="histogram; ozo log transform")
+hist(ozo.bc, col="light blue", xlab="", main="histogram; ozo bc transform") 
+
+hist(ozo.s, col="light blue", xlab="", main="histogram; ozo sqrt transform") 
+var(ozo.s)   #variance of sqrt, log and bc
+var(ozo.log)
+var(ozo.bc)
+```
+
+
+next
+
+```{r}
+library(ggplot2) 
+library(ggfortify) 
+install.packages("ggplot2")
+install.packages("ggfortify")
+y = ts(as.ts(ozo.s), frequency = 12)
+decomp = decompose(y)  #Decomposition of the series
+plot(decomp) #plotting the decomp
+```
+
+
+Next
+```{r}
+var(ozo.s) #var is 0.001144
+
+ozo.s_12 = diff(ozo.s, lag=12) #differenced at lag 12
+
+plot.ts(ozo.s_12, main="s differenced at lag 12")
+var(ozo.s_12)  #variance is close to 0
+fit = lm(ozo.s_12 ~ as.numeric(1:length(ozo.s_12))); abline(fit, col="red")
+mean(ozo.s_12)  #mean is close to 0
+abline(h=mean(ozo.s_12), col="blue")
+
+ozo.dif = diff(ozo.s_12, lag=1) #differenced at lag 12 and 1
+plot.ts(ozo.dif, main="s differenced at lag 12 & lag 1")
+fit = lm(ozo.dif ~ as.numeric(1:length(ozo.dif))); abline(fit, col="red") 
+mean(ozo.dif) #mean is closer to 0
+abline(h=mean(ozo.dif), col="blue")
+var(ozo.dif)  #variance is closer to 0
+```
+
+
+NExt
+```{r}
+acf(ozo.s_12, lag.max=40, main="ACF of the squareroot, differenced at lag 12")
+acf(ozo.dif, lag.max=40, main="ACF of the squareroot, differenced at lags 12 and 1")
+hist(ozo.dif, col="light blue", xlab="", main="histogram; squareroot differenced at lags 12 & 1")
+```
+
+Next
+
+```{r}
+acf(ozo.dif,40,main="ACF of the squareroot_transform, differenced at lags 12 and 1") #shows signifance at lags 1,2
+pacf(ozo.dif,40,main="PACF of the squareroot_transform, differenced at lags 12 and 1") #shows decay
+```
+
+
+Possible models MA q = 1 or 2. Introduce AR components to see what happens to AIC
+
+
+```{r}
+
+arima(ozo.s, order=c(0,1,1), seasonal = list(order = c(0,1,1), period = 12), method="ML") # p = 0, q = 1
+
+arima(ozo.s, order=c(0,1,2), seasonal = list(order = c(0,1,1), period = 12), method="ML") # p = 0, q = 2
+
+arima(ozo.s, order=c(0,1,3), seasonal = list(order = c(0,1,1), period = 12), method="ML") # p = 0, q = 3
+
+
+
+arima(ozo.s, order=c(1,1,1), seasonal = list(order = c(0,1,1), period = 12), method="ML") # p = 1, q = 1
+
+arima(ozo.s, order=c(1,1,2), seasonal = list(order = c(0,1,1), period = 12), method="ML") # p = 1, q = 2
+
+#fix as third coefficient is 0
+arima(ozo.s, order=c(0,1,3), seasonal = list(order = c(0,1,1), period = 12), fixed = c(NA, NA, 0, NA), method="ML")
+
+#fix as 1 and 3 coefs are 0
+arima(ozo.s, order=c(1,1,2), seasonal = list(order = c(0,1,1), period = 12), fixed = c(0, NA, 0, NA), method="ML")
+
+```
+Confirm with AICc function
+
+```{r}
+AICc(arima(ozo.s, order=c(0,1,2), seasonal = list(order = c(0,1,1), period = 12), method="ML")) #-41.6
+AICc(arima(ozo.s, order=c(0,1,3), seasonal = list(order = c(0,1,1), period = 12), fixed = c(NA, NA, 0, NA), #-41.6 method="ML"))
+AICc(arima(ozo.s, order=c(1,1,1), seasonal = list(order = c(0,1,1), period = 12), method="ML"))
+```
+
+Choose top 3 models with lowest AIC
+
+Diagnostics for Model 2 which is arima(0,1,2)(0,1,1)12
+```{r}
+fit = arima(ozo.s, order=c(0,1,2), seasonal = list(order = c(0,1,1), period = 12), method="ML")
+res_1 = residuals(fit) #residuals from model 2
+hist(res_1,density=20,breaks=20, col="blue", xlab="", prob=TRUE) 
+m = mean(res_1) #mean close to 0
+std = sqrt(var(res_1))
+curve( dnorm(x,m,std), add=TRUE )
+plot.ts(res_1)
+fitt = lm(res_1 ~ as.numeric(1:length(res_1))); abline(fitt, col="red") 
+abline(h=mean(res_1), col="blue")
+qqnorm(res_1,main= "Normal Q-Q Plot for Model B")
+qqline(res_1,col="blue")
+acf(res_1, lag.max=40)
+pacf(res_1, lag.max=40)
+#Stats Tests
+shapiro.test(res_1)
+Box.test(res_1, lag = 12, type = c("Box-Pierce"), fitdf = 2)
+Box.test(res_1, lag = 12, type = c("Ljung-Box"), fitdf = 2)
+Box.test(res_1^2, lag = 12, type = c("Ljung-Box"), fitdf = 0)
+acf(res_1^2, lag.max=40)
+ar(res_1, aic = TRUE, order.max = NULL, method = c("yule-walker"))
+```
+
+
+Diagnostics for model 4 which is ARIMA(1,1,1)(0,1,1)
+par(mfrow = c(2,2))
+```{r}
+fit_2 = arima(ozo.s, order=c(1,1,1), seasonal = list(order = c(0,1,1), period = 12), method="ML")
+res_2 = residuals(fit_2) #residuals from model 4
+
+hist(res_2,density=20,breaks=20, col="blue", xlab="", prob=TRUE)
+m_2 = mean(res_2) #mean close to 0
+std_2 = sqrt(var(res_2))
+curve( dnorm(x,m_2,std_2), add=TRUE )
+plot.ts(res_2)
+fitt_2 = lm(res_2 ~ as.numeric(1:length(res_2))); abline(fitt_2, col="red") 
+abline(h=mean(res_2), col="blue")
+qqnorm(res_2,main= "Normal Q-Q Plot for Model B")
+qqline(res_2,col="blue")
+acf(res_2, lag.max=40)
+pacf(res_2, lag.max=40)
+#Stats Tests
+shapiro.test(res_2)
+Box.test(res_2, lag = 12, type = c("Box-Pierce"), fitdf = 3)
+Box.test(res_2, lag = 12, type = c("Ljung-Box"), fitdf = 3)
+Box.test(res_2^2, lag = 12, type = c("Ljung-Box"), fitdf = 0)
+acf(res_2^2, lag.max=40)
+ar(res_2, aic = TRUE, order.max = NULL, method = c("yule-walker"))
+```
+
+Diagnostics for model 3, which is Arima(0,1,3)(0,1,1) where coeffs are fixed
+
+```{r}
+fit_3 = arima(ozo.s, order=c(0,1,3), seasonal = list(order = c(0,1,1), period = 12), fixed = c(NA, NA, 0, NA), method="ML")
+res_3 = residuals(fit_3) #residuals from model 3
+
+hist(res_3,density=20,breaks=20, col="blue", xlab="", prob=TRUE)
+m_3 = mean(res_3) #mean close to 0
+std_3 = sqrt(var(res_3))
+curve( dnorm(x,m_3,std_3), add=TRUE )
+plot.ts(res_3)
+fitt_3 = lm(res_3 ~ as.numeric(1:length(res_3))); abline(fitt_3, col="red") 
+abline(h=mean(res_3), col="blue")
+qqnorm(res_3,main= "Normal Q-Q Plot for Model B")
+qqline(res_3,col="blue")
+acf(res_3, lag.max=40)
+pacf(res_3, lag.max=40)
+#Stats Tests
+shapiro.test(res_3)
+Box.test(res_3, lag = 12, type = c("Box-Pierce"), fitdf = 3)
+Box.test(res_3, lag = 12, type = c("Ljung-Box"), fitdf = 3)
+Box.test(res_3^2, lag = 12, type = c("Ljung-Box"), fitdf = 0)
+acf(res_3^2, lag.max=40)
+ar(res_3, aic = TRUE, order.max = NULL, method = c("yule-walker"))
+```
+
+
+
+Model 1 is difionary cuz it is pure MA
+Check Invertibility
+
+```{r}
+par(mfrow = c(2,2))
+plot.roots(NULL,polyroot(c(1, -0.6649, -0.1991)), main="Model 2, roots for MA part") #Roots for model 2
+plot.roots(NULL,polyroot(c(1, -0.9010, -0.252, 0)), main="Model 3, roots for MA part ") #rootds for model 3
+plot.roots(NULL,polyroot(c(1, 0.2265)), main="Model 4, roots for AR part ") #roots for model 4
+plot.roots(NULL,polyroot(c(1,-0.9026)), main="Model 4, roots for MA part ") #roots for model 4
+
+```
+
+So Model 1 is also invertible as the roots are outside unit circle
+
+For Model 2, difionarity and invertibility must be checked as it is ARMA.
+
+```{r}
+polyroot(c(1, 0.2265))
+polyroot(c(1,-0.9026))
+          
+```
+
+Model 2 is invertible and difionary
+
+
+Model 3 is difionary cause it is pure MA
+Check Invertibility
+```{r}
+polyroot(c(1, -0.9010, -0.252, 0))
+```
+
+
+
+```{r}
+library(forecast)
+fit.A = arima(ozo.s, order=c(0,1,2), seasonal = list(order = c(0,1,1), period = 12), method="ML")
+forecast(fit.A) #forecasting model 2
+
+pred.tr = predict(fit.A, n.ahead = 12) #creating prediction
+U.tr= pred.tr$pred + 2*pred.tr$se #95% CI upper bounds
+L.tr= pred.tr$pred - 2*pred.tr$se #95% CI lower bounds
+ts.plot(ozo.s, xlim=c(1,length(ozo.s)+12), ylim = c(min(ozo.s),max(U.tr)))
+lines(U.tr, col="blue", lty="dashed")
+lines(L.tr, col="blue", lty="dashed")
+points((length(ozo.s)+1):(length(ozo.s)+12), pred.tr$pred, col="red")
+
+
+```
+
+
+```{r, figures-side, fig.show="hold", out.width="50%"}
+pred.orig = pred.tr$pred**2 #squaring data to recreate original data
+U= (U.tr)**2 #squaring CI's
+L= (L.tr)**2
+ts.plot(ozo, xlim=c(1,length(ozo)+12), ylim = c(min(ozo),max(U)), ylab = 'Forecast Ozone')
+lines(U, col="blue", lty="dashed")
+lines(L, col="blue", lty="dashed")
+points((length(ozo)+1):(length(ozo)+12), pred.orig, col="red")
+lines(ozo.ts, col = 'red')
+
+```
+
+```{r}
+ts.plot(ozo.ts, xlim=c(1955,1973), ylim = c(1,5), ylab = 'Original Data')
+```
