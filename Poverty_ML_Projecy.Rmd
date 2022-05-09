@@ -1,0 +1,484 @@
+---
+title: "Untitled"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+  
+library(magrittr) 
+library(dplyr)
+library(tidyverse)
+
+
+state.name <- c(state.name, "District of Columbia")
+state.abb <- c(state.abb, "DC")
+## read in census data
+census <- read_csv("./acs2017_county_data.csv") %>% select(-CountyId, -ChildPoverty, -Income, -IncomeErr, -IncomePerCap, -IncomePerCapErr) %>%
+  mutate(State = state.abb[match(`State`, state.name)]) %>%
+  filter(State != "PR")
+
+
+
+education <- read_csv("./education.csv") %>%
+  filter(!is.na(`2003 Rural-urban Continuum Code`)) %>%
+  filter(State != "PR") %>%
+  select(-`FIPS Code`,
+         -`2003 Rural-urban Continuum Code`,
+         -`2003 Urban Influence Code`,
+         -`2013 Rural-urban Continuum Code`,
+         -`2013 Urban Influence Code`) %>%
+  rename(County = `Area name`)
+
+glimpse(education)
+```
+
+
+
+```{r}
+#problem 1
+dim(census)
+sum(is.na(census))
+
+unique(census$State)
+
+#Problem 2
+dim(education)
+sum(is.na(education))
+
+length(unique(education$County))
+
+length(unique(census$County))
+
+glimpse(education)
+
+```
+
+Dimensions for Census are 3142, 31, and dimensions for education are 3142, 42. There are no missing values in census, however there are missing values in education. Both census and education both have 1877 distinct values for County.
+
+
+DATA WRANGLING
+```{r}
+#Problem 3
+education = na.omit(education)
+
+#Problem 4
+education1 <- education %>% 
+    select(-contains("1990"))
+
+education1 <- education1 %>% 
+    select(-contains("1980"))
+education1 <- education1 %>% 
+    select(-contains("1970"))
+education1 <- education1 %>% 
+    select(-contains("Percent"))
+education1 <- education1 %>% 
+    select(-contains("2000"))
+
+education = mutate(education1, Total_Population = `Less than a high school diploma, 2015-19` + `High school diploma only, 2015-19` + `Some college or associate's degree, 2015-19` +  `Bachelor's degree or higher, 2015-19`)
+
+
+#Problem 5
+
+education.state = education %>%
+  group_by(State)%>%
+  summarise('State Total Less than a high school diploma, 2015-19' = sum(`Less than a high school diploma, 2015-19`), 'State Total High school diploma only, 2015-19' = sum(`High school diploma only, 2015-19`), "State Total Some college or associate's degree, 2015-19" = sum(`Some college or associate's degree, 2015-19`), "State Total Bachelor's degree or higher, 2015-19" = sum(`Bachelor's degree or higher, 2015-19`))
+
+head(education.state)
+
+#Problem 6
+glimpse(education.state)
+
+state.level_temp = education.state%>%
+  group_by(State)%>%
+  mutate('index' = which.max(c(`State Total Less than a high school diploma, 2015-19`, `State Total High school diploma only, 2015-19`, `State Total Some college or associate's degree, 2015-19`, `State Total Bachelor's degree or higher, 2015-19`)))
+
+state.level = state.level_temp%>%
+  group_by(State)%>%
+  mutate('Education Level' = colnames(state.level_temp)[1 + `index`])
+
+state.level = select(state.level, -contains('index'))
+  
+  
+head(state.level)
+
+glimpse(education)
+
+```
+
+
+```{r}
+library(ggplot2)
+install.packages('maps')
+library(maps)
+states <- map_data("state")
+
+ggplot(data = states) + 
+  geom_polygon(aes(x = long, y = lat, fill = region, group = group),
+               color = "white") + 
+  coord_fixed(1.3) +
+  guides(fill=FALSE)  # color legend is unnecessary for this example and takes too long
+```
+
+VISUALIZATION
+
+Problems 7,8
+```{r}
+#Problem 7
+library(stringr)
+states_t = states%>%
+  mutate(State = state.abb[match(str_to_title(region),state.name)])
+
+combined_states = left_join(states_t, state.level, by = "State")
+
+
+ggplot(data = left_join(states_t, state.level, by = "State")) + 
+  geom_polygon(aes(x = long, y = lat, fill = `Education Level`, group = group),
+               color = "white") + 
+  coord_fixed(1.3) + 
+  guides(fill=FALSE)  # color legend is unnecessary for this example and takes too long
+
+
+#Problem 8
+census %>%
+  ggplot( aes(x=Poverty)) +
+    geom_density(fill="#69b3a2", color="#e9ecef", alpha=0.8) +
+    ggtitle("Probability Density of Poverty Levels accross Counties") + geom_vline(xintercept= mean(census$Poverty), color = 'red', size = 1) 
+
+```
+
+Problem 8
+
+For this problem, I wanted to see the probability density of the poverty percentages in all the states. As we see, the distrubution is definitely skewed a little. We can also see the mean portrayed by the red line
+
+
+
+Problem 9, 10
+
+```{r}
+
+head(census)
+
+census.clean = census%>%
+  group_by(County)%>%
+  mutate(Men = signif(Men/TotalPop, 3) * 100, Women = signif(Women/TotalPop, 3) * 100, Employed = signif(Employed/TotalPop, 3) * 100, VotingAgeCitizen = signif(VotingAgeCitizen/TotalPop, 3) * 100, Minority = Hispanic + Black + Native + Asian + Pacific)
+
+census.clean = census.clean[, -c(6,8,9,10,11,22, 17, 28)]
+
+census.clean = select(census.clean, -contains('Unemployment'))
+
+head(census.clean)
+
+```
+
+DIMENSIONALITY REDUCTION
+```{r}
+#Problem 11
+pca.county_temp <- prcomp(census.clean[, c(3:23)], center = TRUE,scale. = TRUE)
+
+pc.county = data.frame(pca.county_temp$rotation)[, c(1,2)]
+
+pc.county[order(-abs(pc.county$PC1)),]
+
+glimpse(education)
+
+#Problem 12
+pca.county_var = pca.county_temp$sdev^2
+
+pve = pca.county_var/sum(pca.county_var)
+
+plot(pve, main = 'PVE')
+
+plot(cumsum(pve), main = 'Cumalitive Sum of PVE')
+```
+
+
+```{r}
+
+x = education
+
+
+rename(x, 'Less than a high school diploma' = `Less than a high school diploma, 2015-19`)
+
+x
+
+```
+
+CLUSTERING
+
+Problem 13
+``` {r}
+library(cluster)
+library(dendextend)
+library(factoextra)
+# hierarchial clustering, complete linkage
+census.dist <- dist(census.clean[, 3:23])
+set.seed(1)
+census.clust <- hclust(census.dist, "complete")
+
+# 10 clusters
+clus = cutree(census.clust, 10)
+table(clus)
+
+# pc.county
+pc.county.dist <- dist(pc.county)
+set.seed(1)
+pc.county.clust <- hclust(pc.county.dist, "complete")
+clus2 = cutree(pc.county.clust, 10)
+table(clus2)
+
+which(census.clean == "Santa Barbara County") # interested in row 3370
+
+
+# the amount of observations in each cluster in pc.county are much more evenly distributed. However, we want clusters where there aren't too little observations in each cluster or it's difficult to interpret results. Census clusters have an unevenly distributed amount of observations in each cluster, with some clusters having many observations which is good, but others only have one or two observations, which is the same problem we ran into in pc.county
+
+```
+
+Problem 14
+```{r}
+
+all <- census.clean %>%
+  left_join(education, by = c("State"="State", "County"="County")) %>% 
+  na.omit
+
+all = all %>%
+  rename(Less_Than_HighSchool = `Less than a high school diploma, 2015-19`,
+         HighSchool_Diploma = `High school diploma only, 2015-19`,
+         Some_College_or_Associate = `Some college or associate's degree, 2015-19`,
+         Bachelors_or_Higher = `Bachelor's degree or higher, 2015-19` )
+
+all_poverty = all
+```
+
+```{r}
+
+all <- all %>%
+  mutate(Poverty=as.factor(ifelse(Poverty <= 20, "0", "1" )))
+
+
+set.seed(123) 
+n <- nrow(all)
+idx.tr <- sample.int(n, 0.8*n) 
+all.tr <- all[idx.tr, ]
+all.te <- all[-idx.tr, ]
+```
+
+
+
+```{r}
+library(tree)
+set.seed(123) 
+nfold <- 10
+folds <- sample(cut(1:nrow(all.tr), breaks=nfold, labels=FALSE))
+
+calc_error_rate = function(predicted.value, true.value){
+  return(mean(true.value!=predicted.value))
+}
+records = matrix(NA, nrow=3, ncol=2)
+colnames(records) = c("train.error","test.error")
+rownames(records) = c("tree","logistic","lasso")
+
+
+
+glimpse(all)
+
+tree.all = tree(Poverty ~ . , data = all.tr)
+```
+
+
+
+CLASSIFICATION
+Problem 15
+```{r}
+
+# Load libraries
+library(ISLR)
+library(tree)
+library(maptree)
+
+all.train <- all.tr[, 3:23]
+colnames(all.train) <- gsub(",", "", colnames(all.train))
+colnames(all.train) <- gsub(" ", "_", colnames(all.train))
+colnames(all.train) <- gsub("-", "", colnames(all.train))
+colnames(all.train) <- gsub("'", "", colnames(all.train))
+
+all.test <- all.te[, 3:23]
+colnames(all.test) <- gsub(",", "", colnames(all.test))
+colnames(all.test) <- gsub(" ", "_", colnames(all.test))
+colnames(all.test) <- gsub("-", "", colnames(all.test))
+colnames(all.test) <- gsub("'", "", colnames(all.test))
+
+glimpse(all.test)
+# train decision tree
+tree.all = tree(Poverty ~ . , data = all.train)
+
+# prune tree
+cv = cv.tree(tree.all, FUN=prune.misclass, K = folds)
+cv$size
+cv$dev
+best.cv = min(cv$size[cv$dev == min(cv$dev)])
+best.cv
+pt.cv = prune.misclass(tree.all, best=best.cv)
+
+#visualize
+# before
+plot(tree.all)
+text(tree.all, pretty=0, col = "blue", cex = .5)
+
+#after
+plot(pt.cv)
+text(pt.cv, pretty=0, col = "blue", cex = .5)
+
+#training and test errors
+train = predict(pt.cv, all.train, type = "class")
+test = predict(pt.cv, all.test, type = "class")
+
+records[1,1] = calc_error_rate(train, all.train$Poverty)
+records[1,2] = calc_error_rate(test, all.test$Poverty)
+
+# Our training error rate is 15% and our test error rate is 16%. Our trees tell us that the most decisive factors of poverty are employment, race, and service. Employment is an obvious factor of poverty, but having the tree split at White next, shows that our Poverty is greatly also a social issue, rather than just an issue of means of money.
+```
+16. 
+```{r}
+glm.fit = glm(Poverty ~ ., all.train, family = "binomial" )
+summary(glm.fit)
+
+glm.fit2 = glm(Poverty ~ ., all.test, family = "binomial" )
+
+prob.training = predict(glm.fit, type = "response")
+predpoverty=as.factor(ifelse(prob.training > 0.5, "0", "1"))
+
+prob.test = predict(glm.fit2, type = "response")
+predpoverty2=as.factor(ifelse(prob.test> 0.5, "0", "1"))
+
+records[2,1] = calc_error_rate(predpoverty, all.train$Poverty)
+records[2,2] = calc_error_rate(predpoverty2, all.test$Poverty)
+
+# Our significant variables are TotalPop, Men, Women, White, Office, Production, Employed, PrivateWork, SelfEmployed, Minority, Less than high school diploma, high school diploma only, some college, and bachelors degree are significant. Men has a coefficient of -1.583e-04, which is the log odds of having the outcome per unit change in poverty. For TotalPop out coefficient estimate is -20.81e+01, the log odds of having the outcome per unit change in poverty.
+```
+
+17. 
+```{r}
+library(glmnet)
+x = model.matrix(Poverty ~., all.train)
+y = all.train$Poverty
+x.train = x[train,]
+y.train = y[train]
+x.test=x[test,]
+y.test=x[test,]
+set.seed(1)
+cv.out = cv.glmnet(x, y, lambda = seq(1, 20) * 1e-5, family = "binomial")
+summary(cv.out)
+
+bestlam = cv.out$lambda.min
+bestlam
+
+predict(cv.out, type="coefficients", s= bestlam)
+
+# coefficients for optimal value: TotalPop, Men, Women, White, Office, Production, Employed, PrivateWork, SelfEmployed, Minority, Less than high school diploma, high school diploma only, some college, and bachelors degree are significant. They are mostly the same as the ones for logistic regression. 
+
+predictiontrain = predict(cv.out,s = bestlam, newx = x.train, type = "response")
+predictiontrain1 <- ifelse(predictiontrain > 0.5, 1, 0)
+
+predictiontest = predict(cv.out,s = bestlam, newx = x.test, type = "response")
+predictiontest2 <- ifelse(predictiontest > 0.5, 1, 0)
+
+records[3,1] = calc_error_rate(predictiontrain1, all.train$Poverty)
+records[3,2] = calc_error_rate(predictiontest2, all.test$Poverty)
+
+```
+
+18.
+```{r}
+library(ROCR)
+# logistic
+logisticpred = prediction(prob.test, all.test$Poverty)
+logisiticperf = performance(logisticpred, measure = "tpr", x.measure = "fpr")
+
+#lasso
+lassopred = prediction(predictiontest, all.test$Poverty)
+lassoperf = percent_rank(lassopred, measure = "tpr", x.measure = "fpr")
+
+plot(logisticperf, col = "blue", lwd = 3, odd=TRUE, alpha = 0.3)
+
+```
+
+
+
+
+```{r}
+glimpse(all.te)
+```
+
+
+
+
+Expansion
+
+Problem 19:
+```{r}
+library(gbm)
+set.seed(1)
+all.train = all.tr[, c(3:23)]
+
+all.boost = gbm(ifelse(Poverty==1,1,0)~., data=all.train,
+  distribution="bernoulli", n.trees=500, interaction.depth=2)
+
+summary(all.boost)
+
+par(mfrow =c(1,2))
+plot(all.boost ,i="Employed", type = "response")
+
+plot(all.boost ,i="Minority", type = "response")
+
+plot(all.boost ,i="White", type = "response")
+
+yhat.boost = predict(all.boost, newdata = all.te,
+  n.trees=500, type = "response")
+
+yhat.boost = ifelse(yhat.boost > 0.5, 1, 0)
+
+test.boost.err = mean(yhat.boost != ifelse(all.te$Poverty==1,1,0))
+test.boost.err
+```
+
+  So for this problem boosting was an interesting classification method to consider since we can actually see visual representations of the data. The first thing was to remove the state and county parameters from the overall data since they are non numerical factors and do not really matter when analyzing factors for poverty in each county. So basically, this analysis tries to determine the important factors in deciding poverty in a given county. The test error was similar to the parts above. Adding on to this, we can see that there are a few factors that are more important in determining poverty in a county. Obviously employment is the largest factor, since a higher percentage of employment in a county will lead to lower rates of poverty. Employment is the largest factor by quite the margin. 
+  The next interesting factor is minority being the second largest factor. This is kind of surprising since I had assumed over time the assimilation of minorities into everyday work happened seemlessly, and the dissonance between color and jobs were almost gone. However, clearly this still exists as the graph shows. The line shows as positive relationship between minorities and poverty. As the percentage of minorities go up, as does poverty. I also plotted the graph for White being a factor and it shows an inverse relationship, which means that as the percentage of being white goes up, the poverty percentage declines, which makes sense given the factors for minority. 
+  
+  
+
+Problem 20
+
+```{r}
+all_linear = all_poverty[, c(3:23)]
+
+
+model = lm(Poverty ~ ., data = all_linear)
+
+summary(model)
+
+plot(cooks.distance(model), pch = 16, col = "blue")
+```
+
+```{r}
+#Now try removing some variables that did not seem to matter in relation to poverty to see if the regression improves
+
+all_linear2 = all_poverty[, c(3:5, 7:9, 11:12, 17, 19:23) ]
+
+model2 = lm(Poverty ~ ., data = all_linear2)
+
+summary(model2)
+
+
+```
+From the beginning of this project, the feature of Poverty and its signficance in a certain county was the most fascinating thing. Because it is a major problem in today's world and seeing the relations to all the different factors such as race, employment etc. was very interesting and meaningful to the real world. So of course finding the value of poverty through a linear regression seemed like the ideal metric for this question and a interesting method to combine knowledge from other classes. In order to see if there were some better results, I removed the factors that seemed to be unimportant from the boost above. However this did not lead to a better linear model. Next was to look cook distance to view abnormalities in the data and there were definitely point that skewed the data as can be shown the plot.
+
+
+Problem 21:
+
+I want to take a further look at the differnt minorities and their relation to poverty levels in each county. To do this, we need to step back and find
+
